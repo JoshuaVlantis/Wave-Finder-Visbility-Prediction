@@ -260,4 +260,4 @@ A: If you don’t have enough labeled rows, the script trains on all data and sk
 ## 13) License & attribution
 
 - Weather and marine data are provided by **Open‑Meteo** — see their terms.  
-- This repository’s code is (choose a license) — e.g., MIT. Update `LICENSE` accordingly.
+- This repository’s code is under GNU AFFERO GENERAL PUBLIC LICENSE

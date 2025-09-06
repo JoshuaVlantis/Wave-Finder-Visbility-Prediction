@@ -1,0 +1,24 @@
+# ---- Sensitive config ----
+config.ini
+
+# ---- Python bytecode & caches ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- Virtual environments ----
+venv/
+.venv/
+env/
+
+# ---- Optional: OS/editor noise ----
+# .DS_Store
+# Thumbs.db
+# .idea/
+# .vscode/
+
+# ---- Optional: model artifacts & run outputs ----
+# models/*.pkl
+# models/*.meta.json
+# predictions/
+# data/debug_input_features_*.csv

@@ -1,0 +1,22 @@
+Model base rating: [2.84615385]
+Prediction Breakdown (Top 20):
+wave_height_avg_24h: DOWN 0.0000
+wave_height_std_24h: DOWN 0.0000
+swell_wave_height_avg_24h: DOWN 0.0000
+swell_wave_period_avg_24h: DOWN 0.0000
+wind_wave_height_avg_24h: DOWN 0.0000
+ocean_current_velocity_avg_24h: DOWN 0.0000
+sea_surface_temp_avg_24h: DOWN 0.0000
+sea_level_mean_24h: DOWN 0.0000
+sea_level_std_24h: DOWN 0.0000
+sea_level_roc_per_hr_24h: DOWN 0.0000
+wave_direction_mean_24h: DOWN 0.0000
+wave_direction_std_24h: DOWN 0.0000
+wind_wave_direction_mean_24h: DOWN 0.0000
+wind_wave_direction_std_24h: DOWN 0.0000
+swell_wave_direction_mean_24h: DOWN 0.0000
+swell_wave_direction_std_24h: DOWN 0.0000
+ocean_current_direction_mean_24h: DOWN 0.0000
+ocean_current_direction_std_24h: DOWN 0.0000
+wind_speed_avg_24h: DOWN 0.0000
+wind_direction_std_24h: DOWN 0.0000

@@ -1,0 +1,1 @@
+(SHAP explanation skipped: The passed model is not callable and cannot be analyzed directly with the given masker! Model: ElasticNet(alpha=0.01, l1_ratio=0.1, random_state=42))

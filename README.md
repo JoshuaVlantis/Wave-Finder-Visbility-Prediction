@@ -240,24 +240,9 @@ What happens:
 - Per‑model hyper‑parameter searches.
 - Quantile regression for predictive intervals (P10/P50/P90 meters).
 
-
 ---
 
-## 12) FAQ
-
-**Q: My prediction says “N/A” confidence. Why?**  
-A: Only tree ensembles (e.g., RandomForest) get a simple agreement‑based confidence. Others show “N/A”.
-
-**Q: I changed column names in my DB.**  
-A: Update your ingestion to match the names expected here (see §2) or adapt the feature code.
-
-**Q: My test set size is 0.**  
-A: If you don’t have enough labeled rows, the script trains on all data and skips hold‑out metrics. Add more labels.
-
-
----
-
-## 13) License & attribution
+## 12) License & attribution
 
 - Weather and marine data are provided by **Open‑Meteo** — see their terms.  
 - This repository’s code is under GNU AFFERO GENERAL PUBLIC LICENSE

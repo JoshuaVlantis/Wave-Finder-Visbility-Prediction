@@ -1,1 +1,0 @@
-(SHAP explanation skipped: The passed model is not callable and cannot be analyzed directly with the given masker! Model: KNeighborsRegressor(n_neighbors=10, weights='distance'))

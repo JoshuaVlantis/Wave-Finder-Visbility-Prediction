@@ -1,20 +1,3 @@
-"""
-Train visibility (meters) regression models for a given location using labels stored in MySQL.
-
-Workflow:
-- Read DB credentials from local `config.ini` ([db] section).
-- Pull all labeled rows (Visibility_Rating) for the location from LiveOceanData.
-- For each label timestamp, fetch the 72h window of ocean & weather data and build features.
-- Split chronologically (80/20) into train/test; sanitize features.
-- Train a suite of regressors on:
-    (a) the combined multi-window feature set, and
-    (b) each individual window (24h / 48h / 72h).
-- Save models and JSON metadata under ./models and write a CSV training summary.
-
-Usage:
-    python train_model_from_db.py "Bay Side"
-"""
-
 import sys
 import os
 import json
@@ -35,19 +18,22 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, Ridge, ElasticNet
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
+from sklearn.base import clone  # NEW: to avoid estimator reuse across windows
 
-# Optional gradient-boosting libs (used if available)
-_HAS_XGB = _HAS_LGBM = False
+
+# Optional gradient-boosting libs (graceful if missing)
+XGBRegressor = None
+lgb = None
 try:
-    from xgboost import XGBRegressor
-    _HAS_XGB = True
-except Exception:
-    pass
+    from xgboost import XGBRegressor as _XGBRegressor
+    XGBRegressor = _XGBRegressor
+except Exception as e:
+    print(f"⚠️ Skipping XGBoost: {e}")
 try:
-    import lightgbm as lgb
-    _HAS_LGBM = True
-except Exception:
-    pass
+    import lightgbm as _lgb
+    lgb = _lgb
+except Exception as e:
+    print(f"⚠️ Skipping LightGBM: {e}")
 
 from temporal_features import (
     extract_trend_features,
@@ -76,16 +62,17 @@ def model_zoo():
         "RandomForest":  pipe(RandomForestRegressor(n_estimators=400, random_state=42, n_jobs=-1)),
         "HGBDT":         pipe(HistGradientBoostingRegressor(learning_rate=0.06, max_depth=8, max_bins=255, random_state=42)),
     }
-    if _HAS_XGB:
+    if XGBRegressor is not None:
         zoo["XGBoost"] = pipe(XGBRegressor(
             n_estimators=800, max_depth=6, learning_rate=0.05,
             subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
             tree_method="hist", random_state=42, n_estimators_per_tree=None
         ))
-    if _HAS_LGBM:
+    if lgb is not None:
         zoo["LightGBM"] = pipe(lgb.LGBMRegressor(
             n_estimators=1400, learning_rate=0.03, subsample=0.9,
-            colsample_bytree=0.9, reg_lambda=1.0, random_state=42, n_jobs=1
+            colsample_bytree=0.9, reg_lambda=1.0, random_state=42, n_jobs=1,
+            verbose=-1
         ))
     return zoo
 
@@ -194,9 +181,12 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 safe_loc = slugify(location)
 
 # ---------- Database ----------
+# Always look for config.ini in the same directory as this script
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
 cfg = configparser.ConfigParser()
-if not cfg.read('config.ini'):
-    raise RuntimeError("config.ini not found")  # Fail fast if missing
+if not cfg.read(CONFIG_PATH):
+    raise RuntimeError(f"config.ini not found at {CONFIG_PATH}")
+
 
 db = cfg['db']
 
@@ -323,10 +313,18 @@ def train_suite(cols, tag, display_suffix=""):
     if len(X_test) == 0:
         Xt_tr, Xt_te = Xt_all, Xt_all.iloc[0:0]
 
-    for name, model in zoo.items():
+    for name, base_model in zoo.items():
+        # fresh estimator per window to avoid n_features_in_ mismatches
+        model = clone(base_model)
         label = f"{name}{display_suffix}"
         print(f"\n🏋️ Training {label}…")
+        print("  -> Xt_tr shape:", getattr(Xt_tr, "shape", None))
         model.fit(Xt_tr, y_train)
+        # Post-fit safety check for feature count if available
+        est = getattr(model, "named_steps", {}).get("est", model)
+        nfi = getattr(est, "n_features_in_", None)
+        if nfi is not None and nfi != Xt_tr.shape[1]:
+            raise ValueError(f"{label}: fitted n_features_in_={nfi} does not match Xt_tr.shape[1]={Xt_tr.shape[1]}")
 
         n_te = len(Xt_te)
         if n_te > 0:

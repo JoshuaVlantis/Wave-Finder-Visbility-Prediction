@@ -1,22 +1,3 @@
-"""
-Predict visibility (in meters) for a given location using previously trained models.
-
-Workflow:
-- Read DB credentials from a local `config.ini` ([db] section).
-- Pull the most recent 72 hours of ocean & weather data for the location.
-- Build multi-window (24/48/72h) features.
-- Load one or more models from ./models and generate predictions.
-- Save prediction, confidence (best-effort for tree models), and basic SHAP text to ./predictions.
-
-Usage:
-    python predict_visibility_from_db.py "Wild Side" [ModelName]
-
-Notes:
-- The models are trained separately using `train_model_from_db.py` and saved under ./models.
-- Confidence is a heuristic (tree agreement) and may be N/A for non-tree models.
-- SHAP explanations are best-effort if `shap` is available; failures are logged in the output file.
-"""
-
 import sys
 import os
 import json
@@ -28,13 +9,6 @@ import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
 import configparser
-
-
-try:
-    import shap
-    _HAS_SHAP = True
-except Exception:
-    _HAS_SHAP = False
 
 from temporal_features import (
     extract_trend_features,
@@ -172,20 +146,6 @@ def list_available_models(models_dir: Path, safe_loc: str):
             found[display] = (pkl_path, meta_path)
     return found
 
-
-def try_tree_confidence(model, X_df):
-    """Return a naive agreement-based confidence for RandomForest; others -> None."""
-    try:
-        if hasattr(model, "estimators_") and isinstance(model.estimators_, (list, tuple)):
-            preds = np.array([t.predict(X_df)[0] for t in model.estimators_])
-            confidence_std = float(np.std(preds))
-            confidence_score = max(0.0, 1.0 - (confidence_std / 2.0))
-            return int(round(confidence_score * 100))
-    except Exception:
-        pass
-    return None
-
-
 def write_text(path: Path, text: str):
     """Create parent dirs and write a small text file with UTF-8 encoding."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,12 +155,10 @@ def write_text(path: Path, text: str):
 
 # ---------- CLI entry ----------
 if len(sys.argv) < 2:
-    print('❌ Usage: python predict_visibility_from_db.py "Wild Side" [ModelName]')
+    print('❌ Usage: python predict_visibility_from_db.py "Wild Side"')
     sys.exit(1)
 
 location = sys.argv[1]
-selected_model = sys.argv[2] if len(sys.argv) >= 3 else None
-
 SCRIPT_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
 DATA_DIR = SCRIPT_DIR / "data"
 MODELS_DIR = SCRIPT_DIR / "models"
@@ -210,9 +168,11 @@ safe_loc = slugify(location)
 print(f"📍 Predicting visibility for: {location}")
 
 # --- Database pull (credentials from config.ini) ---
+# Always look for config.ini in the same directory as this script
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
 cfg = configparser.ConfigParser()
-if not cfg.read('config.ini'):
-    raise RuntimeError("config.ini not found")  # Keep explicit failure for missing config
+if not cfg.read(CONFIG_PATH):
+    raise RuntimeError(f"config.ini not found at {CONFIG_PATH}")
 
 db = cfg['db']
 
@@ -243,19 +203,14 @@ if not available:
     print(f"❌ No trained models found for {location} in {MODELS_DIR}")
     sys.exit(1)
 
-if selected_model:
-    match = {name: paths for name, paths in available.items() if name.lower() == selected_model.lower()}
-    if not match:
-        print(f"❌ Model '{selected_model}' not found. Available: {', '.join(available.keys())}")
-        sys.exit(1)
-    run_models = match
-else:
-    run_models = available  # run all
-
+run_models = available  # Always run all available models for the location
 
 # --- Run predictions and write outputs ---
 PRED_DIR.mkdir(parents=True, exist_ok=True)
 
+
+# Collect predictions in a dictionary
+predictions = {}
 for name, (pkl_path, meta_path) in sorted(run_models.items()):
     with open(meta_path, "r") as f:
         meta = json.load(f)
@@ -272,38 +227,41 @@ for name, (pkl_path, meta_path) in sorted(run_models.items()):
     model = joblib.load(pkl_path)
     pred = float(model.predict(X)[0])
 
-    # Optional confidence for tree ensembles
-    conf = try_tree_confidence(model, X)
-    conf_str = f"{conf}%" if conf is not None else "N/A"
-    print(f"⭐ [{display}] Visibility Rating: {pred:.2f}  (confidence: {conf_str})")
+    # print(f"[{display}] Visibility Rating: {pred:.2f}")
 
     base_slug = slugify(display)
     write_text(PRED_DIR / f"visibility_prediction_{safe_loc}__{base_slug}.txt", f"{pred:.2f}")
-    write_text(PRED_DIR / f"visibility_confidence_{safe_loc}__{base_slug}.txt", conf_str)
+    predictions[display] = pred
 
-    # SHAP (best effort)
-    expl_text = []
-    if _HAS_SHAP:
-        try:
-            explainer = shap.Explainer(model)
-            vals = explainer(X)
-            base_value = explainer.expected_value
-            pairs = sorted(zip(X.columns, vals.values[0]), key=lambda x: abs(x[1]), reverse=True)
-            expl_text.append(f"Model base rating: {base_value}")
-            expl_text.append("Prediction Breakdown (Top 20):")
-            for feat, value in pairs[:20]:
-                direction = "UP" if value > 0 else "DOWN"
-                expl_text.append(f"{feat}: {direction} {abs(float(value)):.4f}")
-        except Exception as e:
-            expl_text.append(f"(SHAP explanation skipped: {e})")
-    else:
-        expl_text.append("(SHAP not installed)")
+# Now you can use the predictions dictionary for further processing
+# For demonstration, print the dictionary:
+# Use below to print a specific model's prediction
+# Print(predictions.get("ElasticNet"))
 
-    write_text(PRED_DIR / f"visibility_explanation_{safe_loc}__{base_slug}.txt", "\n".join(expl_text))
+print("\nAll predictions:")
+for model_name, pred_value in predictions.items():
+    print(f"{model_name}: {pred_value:.2f}")
 
 print("\n" + "★"*40)
-if selected_model:
-    print(f"🌊 FINAL VISIBILITY for {location.upper()} using [{selected_model}] written to predictions/")
-else:
-    print(f"🌊 FINAL VISIBILITY for {location.upper()} for ALL MODELS (combined + per-window) written to predictions/")
+print(f" FINAL VISIBILITY for {location.upper()} for ALL MODELS (combined + per-window) written to predictions/")
 print("★"*40)
+
+# Write all predictions to database for logging
+try:
+    conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+    cursor = conn.cursor()
+
+
+    # Insert all predictions into the database
+    for model_name in predictions:
+        pred_value = predictions[model_name]
+        
+        cursor.execute(
+            "INSERT INTO visibility_predictions (area, prediction, model_name) VALUES (%s, %s, %s)",
+            (location, pred_value, model_name)
+        )
+
+    conn.commit()
+    print("✅ Predictions successfully written to the database.")
+except Exception as e:
+    print(f"❌ Failed to write predictions to the database: {e}")

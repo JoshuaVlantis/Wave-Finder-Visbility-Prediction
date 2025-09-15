@@ -1,14 +1,3 @@
-"""
-Feature engineering utilities for ocean-visibility modeling.
-
-This module provides:
-- Safe datetime/index handling helpers.
-- Circular statistics helpers for angles (degrees).
-- 24h trend, event-timing, and circular trend features.
-- Multi-window (24/48/72h) aggregation across ocean & weather inputs.
-- Basic tide stage signal near the label time.
-"""
-
 import math
 from typing import Dict, List, Optional
 

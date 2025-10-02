@@ -257,7 +257,7 @@ try:
         pred_value = predictions[model_name]
         
         cursor.execute(
-            "INSERT INTO visibility_predictions (area, prediction, model_name) VALUES (%s, %s, %s)",
+            "INSERT INTO visibility_predictions_dev (area, prediction, model_name) VALUES (%s, %s, %s)",
             (location, pred_value, model_name)
         )
 
